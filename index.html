@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+  <meta name="theme-color" content="#0e0e0f"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Minutnik"/>
+  <meta name="description" content="Minutnik z timerem pracy i przerwy oraz sterowaniem głosem"/>
+  <title>Minutnik</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icons/icon-192.png"/>
+  <link rel="icon" type="image/png" href="icons/icon-192.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; width: 100%;
+      background: #0e0e0f;
+      font-family: 'DM Sans', sans-serif;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .app {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      background: #0e0e0f;
+      color: #e8e8e8;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+    .status-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-top: max(env(safe-area-inset-top), 12px);
+      padding-left: 20px; padding-right: 20px; padding-bottom: 0;
+      font-size: 12px; color: #666;
+      font-family: 'DM Mono', monospace;
+      min-height: 36px;
+    }
+    .lang-toggle {
+      display: flex; margin: 8px auto 0;
+      background: #1a1a1e; border-radius: 8px;
+      overflow: hidden; border: 0.5px solid #2a2a2e;
+    }
+    .lang-btn {
+      padding: 6px 16px; font-size: 12px;
+      font-family: 'DM Sans', sans-serif;
+      color: #555; background: transparent; border: none;
+      cursor: pointer; font-weight: 500;
+      min-height: 34px;
+    }
+    .lang-btn.active { background: #2a2a2e; color: #e8e8e8; }
+    .app-title {
+      text-align: center; font-size: 13px; font-weight: 500;
+      color: #444; letter-spacing: 0.14em; text-transform: uppercase;
+      margin-top: 8px; font-family: 'DM Mono', monospace;
+    }
+    .controls-row {
+      display: flex; align-items: center; justify-content: center;
+      padding: 16px 10px 6px; flex: 1;
+    }
+    .knob-section {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 5px; width: 92px;
+    }
+    .knob-label {
+      font-size: 9px; color: #555; text-align: center;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      font-family: 'DM Mono', monospace; line-height: 1.4;
+    }
+    .knob-wrap {
+      position: relative; width: 74px; height: 74px;
+      cursor: ns-resize; user-select: none; touch-action: none;
+    }
+    .knob-svg { width: 74px; height: 74px; }
+    .knob-val-btn {
+      font-size: 17px; font-weight: 600; color: #e8e8e8;
+      font-family: 'DM Mono', monospace; text-align: center;
+      background: #1a1a1e; border: 0.5px solid #3a3a3e;
+      cursor: pointer; padding: 3px 10px; border-radius: 7px;
+      line-height: 1.2; min-width: 44px;
+    }
+    .knob-val-btn:active { background: #2a2a2e; }
+    .knob-unit {
+      font-size: 9px; color: #555;
+      font-family: 'DM Mono', monospace; text-align: center;
+    }
+    .cmd-box {
+      background: #1a1a1e; border: 0.5px solid #2a2a2e;
+      border-radius: 8px; padding: 5px 7px;
+      display: flex; align-items: center; gap: 5px;
+      width: 88px; margin-top: 2px;
+    }
+    .cmd-label {
+      font-size: 9px; color: #666;
+      font-family: 'DM Mono', monospace;
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .rec-btn {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #e8e8e8; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .15s, transform .1s;
+    }
+    .rec-btn svg { width: 12px; height: 12px; fill: #0e0e0f; }
+    .rec-btn:active { transform: scale(.9); }
+    .rec-btn.recording { background: #ff5e5e; animation: rpulse .8s infinite; }
+    .rec-btn.recording svg { fill: #fff; }
+    @keyframes rpulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,94,94,.4); }
+      50% { box-shadow: 0 0 0 5px rgba(255,94,94,0); }
+    }
+    .center-timer {
+      display: flex; flex-direction: column;
+      align-items: center; flex: 1; gap: 7px;
+    }
+    .timer-ring-wrap { position: relative; width: 140px; height: 140px; }
+    .timer-display {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 2px;
+    }
+    .timer-time {
+      font-size: 28px; font-weight: 500; color: #e8e8e8;
+      font-family: 'DM Mono', monospace; letter-spacing: .04em;
+    }
+    .timer-phase {
+      font-size: 9px; color: #555; letter-spacing: .12em;
+      text-transform: uppercase; font-family: 'DM Mono', monospace;
+    }
+    .play-btn {
+      width: 56px; height: 56px; border-radius: 50%;
+      background: #e8e8e8; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .1s, background .2s;
+    }
+    .play-btn:active { transform: scale(.92); }
+    .play-btn.running { background: #ff5e5e; }
+    .play-btn.onbreak { background: #5eb8ff; }
+    .play-icon { width: 22px; height: 22px; fill: #0e0e0f; }
+    .session-dots { display: flex; gap: 5px; }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #2a2a2e; transition: background .3s;
+    }
+    .dot.done { background: #5eb858; }
+    .dot.active { background: #e8e8e8; }
+    .reset-btn {
+      background: transparent; border: 0.5px solid #2a2a2e;
+      color: #555; font-family: 'DM Mono', monospace;
+      font-size: 9px; letter-spacing: .1em;
+      padding: 4px 14px; border-radius: 6px; cursor: pointer;
+      text-transform: uppercase; min-height: 28px;
+    }
+    .start-stop-row { display: flex; gap: 6px; }
+    .cmd-box-sm {
+      background: #1a1a1e; border: 0.5px solid #2a2a2e;
+      border-radius: 8px; padding: 4px 6px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .cmd-label-sm {
+      font-size: 9px; color: #666;
+      font-family: 'DM Mono', monospace; white-space: nowrap;
+    }
+    .voice-bar {
+      margin: 6px 14px; background: #1a1a1e;
+      border-radius: 12px; border: 0.5px solid #2a2a2e;
+      padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .voice-row { display: flex; align-items: center; gap: 10px; }
+    .mic-btn {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: #e8e8e8; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background .2s, transform .1s;
+    }
+    .mic-btn:active { transform: scale(.92); }
+    .mic-btn.listening { background: #ff5e5e; animation: rpulse 1.2s infinite; }
+    .mic-btn svg { width: 18px; height: 18px; fill: #0e0e0f; }
+    .mic-btn.listening svg { fill: #fff; }
+    .voice-info { flex: 1; min-width: 0; }
+    .voice-heard {
+      font-size: 11px; color: #555;
+      font-family: 'DM Mono', monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .voice-result {
+      font-size: 11px; color: #5eb858;
+      font-family: 'DM Mono', monospace; min-height: 14px;
+    }
+    .voice-hint {
+      font-size: 9px; color: #333;
+      font-family: 'DM Mono', monospace; line-height: 1.5;
+    }
+    .bottom-bar {
+      padding: 8px 20px;
+      padding-bottom: max(env(safe-area-inset-bottom), 16px);
+      border-top: 0.5px solid #1a1a1e;
+    }
+    .status-text {
+      font-size: 10px; color: #3a3a3a; text-align: center;
+      font-family: 'DM Mono', monospace; letter-spacing: .06em;
+    }
+    .overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,.72);
+      display: flex; align-items: flex-end;
+      z-index: 100;
+    }
+    .overlay.hidden { display: none; }
+    .sheet {
+      background: #141416; border-radius: 20px 20px 0 0;
+      width: 100%; padding: 16px 14px 22px;
+      border-top: 0.5px solid #2a2a2e;
+    }
+    .sheet-title {
+      font-size: 11px; color: #555;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: .1em; text-transform: uppercase;
+      margin-bottom: 10px; text-align: center;
+    }
+    .num-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      gap: 5px; margin-bottom: 12px;
+      max-height: 220px; overflow-y: auto;
+    }
+    .num-cell {
+      background: #1a1a1e; border: 0.5px solid #2a2a2e;
+      border-radius: 7px; font-size: 13px; color: #bbb;
+      font-family: 'DM Mono', monospace;
+      text-align: center; padding: 9px 0; cursor: pointer;
+    }
+    .num-cell:active { background: #333; }
+    .num-cell.sel { background: #e8e8e8; color: #0e0e0f; border-color: #e8e8e8; }
+    .num-cell.bsel { background: #5eb8ff; color: #0e0e0f; border-color: #5eb8ff; }
+    .sheet-cancel {
+      width: 100%; background: transparent;
+      border: 0.5px solid #2a2a2e; color: #555;
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      letter-spacing: .08em; padding: 9px; border-radius: 8px;
+      cursor: pointer; text-transform: uppercase;
+    }
+    .rec-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,.78);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+    }
+    .rec-overlay.hidden { display: none; }
+    .rec-sheet {
+      background: #141416; border-radius: 16px;
+      width: 230px; padding: 20px 16px;
+      border: 0.5px solid #2a2a2e;
+      display: flex; flex-direction: column;
+      align-items: center; gap: 12px;
+    }
+    .rec-title {
+      font-size: 11px; color: #777;
+      font-family: 'DM Mono', monospace;
+      letter-spacing: .1em; text-transform: uppercase; text-align: center;
+    }
+    .rec-big-btn {
+      width: 62px; height: 62px; border-radius: 50%;
+      background: #e8e8e8; border: none;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: transform .1s;
+    }
+    .rec-big-btn:active { transform: scale(.93); }
+    .rec-big-btn.recording { background: #ff5e5e; animation: rpulse 1s infinite; }
+    .rec-big-btn svg { width: 26px; height: 26px; fill: #0e0e0f; }
+    .rec-big-btn.recording svg { fill: #fff; }
+    .rec-heard {
+      font-size: 15px; color: #e8e8e8;
+      font-family: 'DM Mono', monospace;
+      min-height: 22px; text-align: center;
+    }
+    .rec-hint {
+      font-size: 10px; color: #444;
+      font-family: 'DM Mono', monospace;
+      text-align: center; line-height: 1.5;
+    }
+    .rec-actions { display: flex; gap: 8px; width: 100%; }
+    .rec-save {
+      flex: 1; background: #e8e8e8; border: none;
+      color: #0e0e0f; font-family: 'DM Mono', monospace;
+      font-size: 11px; padding: 9px; border-radius: 8px;
+      cursor: pointer; text-transform: uppercase;
+    }
+    .rec-cancel-btn {
+      flex: 1; background: transparent;
+      border: 0.5px solid #2a2a2e; color: #555;
+      font-family: 'DM Mono', monospace; font-size: 11px;
+      padding: 9px; border-radius: 8px; cursor: pointer;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="status-bar">
+    <span id="clock-time">--:--</span>
+    <span>●●●</span>
+  </div>
+
+  <div class="lang-toggle">
+    <button class="lang-btn active" onclick="setLang('pl')">PL</button>
+    <button class="lang-btn" onclick="setLang('en')">EN</button>
+  </div>
+  <div class="app-title" id="app-title">minutnik</div>
+
+  <div class="controls-row">
+    <div class="knob-section">
+      <div class="knob-label" id="lbl-work">czas<br>pracy</div>
+      <div class="knob-wrap" id="knob-work" data-min="1" data-max="60" data-val="25">
+        <svg class="knob-svg" viewBox="0 0 74 74">
+          <circle cx="37" cy="37" r="31" fill="none" stroke="#2a2a2e" stroke-width="3"/>
+          <circle id="arc-work" cx="37" cy="37" r="31" fill="none" stroke="#e8e8e8" stroke-width="3" stroke-linecap="round" stroke-dasharray="194.8" stroke-dashoffset="48.7" transform="rotate(-225 37 37)"/>
+          <circle cx="37" cy="37" r="23" fill="#1a1a1e"/>
+          <circle id="knob-dot-work" cx="37" cy="10" r="3" fill="#e8e8e8"/>
+        </svg>
+      </div>
+      <button class="knob-val-btn" id="val-work" onclick="openNumPicker('work')">25</button>
+      <div class="knob-unit" id="unit-work">min — kliknij</div>
+      <div class="cmd-box">
+        <span class="cmd-label" id="cmd-work-text">praca 25</span>
+        <button class="rec-btn" onclick="openRecOverlay('work')" aria-label="Nagraj komendę pracy">
+          <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 19.93V22h2v-1.07A8 8 0 0 0 20 13h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="center-timer">
+      <div class="timer-ring-wrap">
+        <svg width="140" height="140" viewBox="0 0 140 140">
+          <circle cx="70" cy="70" r="60" fill="none" stroke="#1a1a1e" stroke-width="4"/>
+          <circle id="progress-ring" cx="70" cy="70" r="60" fill="none" stroke="#e8e8e8" stroke-width="4"
+            stroke-linecap="round" stroke-dasharray="376.99" stroke-dashoffset="376.99"
+            transform="rotate(-90 70 70)" style="transition:stroke-dashoffset 1s linear,stroke .5s"/>
+        </svg>
+        <div class="timer-display">
+          <div class="timer-time" id="timer-disp">25:00</div>
+          <div class="timer-phase" id="phase-disp">—</div>
+        </div>
+      </div>
+      <button class="play-btn" id="play-btn" onclick="toggleTimer()" aria-label="Start">
+        <svg class="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <div class="session-dots">
+        <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      </div>
+      <button class="reset-btn" onclick="resetTimer()" id="reset-btn">reset</button>
+      <div class="start-stop-row">
+        <div class="cmd-box-sm">
+          <span class="cmd-label-sm" id="cmd-start-text">start</span>
+          <button class="rec-btn" onclick="openRecOverlay('start')" aria-label="Nagraj start">
+            <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 19.93V22h2v-1.07A8 8 0 0 0 20 13h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/></svg>
+          </button>
+        </div>
+        <div class="cmd-box-sm">
+          <span class="cmd-label-sm" id="cmd-stop-text">stop</span>
+          <button class="rec-btn" onclick="openRecOverlay('stop')" aria-label="Nagraj stop">
+            <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 19.93V22h2v-1.07A8 8 0 0 0 20 13h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="knob-section">
+      <div class="knob-label" id="lbl-break">czas<br>przerwy</div>
+      <div class="knob-wrap" id="knob-break" data-min="1" data-max="30" data-val="5">
+        <svg class="knob-svg" viewBox="0 0 74 74">
+          <circle cx="37" cy="37" r="31" fill="none" stroke="#2a2a2e" stroke-width="3"/>
+          <circle id="arc-break" cx="37" cy="37" r="31" fill="none" stroke="#5eb8ff" stroke-width="3" stroke-linecap="round" stroke-dasharray="194.8" stroke-dashoffset="162.5" transform="rotate(-225 37 37)"/>
+          <circle cx="37" cy="37" r="23" fill="#1a1a1e"/>
+          <circle id="knob-dot-break" cx="37" cy="10" r="3" fill="#5eb8ff"/>
+        </svg>
+      </div>
+      <button class="knob-val-btn" id="val-break" onclick="openNumPicker('break')">5</button>
+      <div class="knob-unit" id="unit-break">min — kliknij</div>
+      <div class="cmd-box">
+        <span class="cmd-label" id="cmd-break-text">przerwa 5</span>
+        <button class="rec-btn" onclick="openRecOverlay('break')" aria-label="Nagraj komendę przerwy">
+          <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 19.93V22h2v-1.07A8 8 0 0 0 20 13h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="voice-bar">
+    <div class="voice-row">
+      <button class="mic-btn" id="mic-btn" onclick="toggleVoice()" aria-label="Mikrofon">
+        <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 19.93V22h2v-1.07A8 8 0 0 0 20 13h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/></svg>
+      </button>
+      <div class="voice-info">
+        <div class="voice-heard" id="voice-heard">—</div>
+        <div class="voice-result" id="voice-result"></div>
+      </div>
+    </div>
+    <div class="voice-hint" id="voice-hint">"start" · "stop" · "reset" · "praca 25" · "przerwa 5"</div>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="status-text" id="status-txt">gotowy</div>
+  </div>
+
+  <div class="overlay hidden" id="num-overlay">
+    <div class="sheet">
+      <div class="sheet-title" id="sheet-title">wybierz minuty</div>
+      <div class="num-grid" id="num-grid"></div>
+      <button class="sheet-cancel" id="sheet-cancel" onclick="closeNumPicker()">anuluj</button>
+    </div>
+  </div>
+
+  <div class="rec-overlay hidden" id="rec-overlay">
+    <div class="rec-sheet">
+      <div class="rec-title" id="rec-title">nagraj komendę</div>
+      <button class="rec-big-btn" id="rec-big-btn" onclick="toggleRecording()">
+        <svg viewBox="0 0 24 24"><path d="M12 1a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V5a4 4 0 0 1 4-4zm-1 19.93V22h2v-1.07A8 8 0 0 0 20 13h-2a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93z"/></svg>
+      </button>
+      <div class="rec-heard" id="rec-heard">—</div>
+      <div class="rec-hint" id="rec-hint">naciśnij i powiedz swoje słowo</div>
+      <div class="rec-actions">
+        <button class="rec-save" id="rec-save" onclick="saveCustomCmd()">zapisz</button>
+        <button class="rec-cancel-btn" onclick="closeRecOverlay()">anuluj</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+
+var T = {
+  pl: {
+    title:'minutnik', work:'czas\npracy', brk:'czas\nprzerwy', min_click:'min — kliknij',
+    ready:'gotowy', working:'pracujesz', breaking:'przerwa', done:'sesja skończona!',
+    phase_work:'praca', phase_break:'przerwa',
+    mic_on:'słucham...', cmd_ok:'✓ ', no_cmd:'nie rozumiem', no_support:'brak obsługi głosu',
+    pick_min:'wybierz minuty', cancel:'anuluj',
+    rec_hint:'naciśnij i powiedz swoje słowo', save:'zapisz',
+    rec_title_work:'komenda — praca', rec_title_break:'komenda — przerwa',
+    rec_title_start:'komenda — start', rec_title_stop:'komenda — stop'
+  },
+  en: {
+    title:'timer', work:'work\ntime', brk:'break\ntime', min_click:'min — tap',
+    ready:'ready', working:'working', breaking:'on break', done:'session done!',
+    phase_work:'work', phase_break:'break',
+    mic_on:'listening...', cmd_ok:'✓ ', no_cmd:'not understood', no_support:'voice not supported',
+    pick_min:'choose minutes', cancel:'cancel',
+    rec_hint:'press and say your word', save:'save',
+    rec_title_work:'command — work', rec_title_break:'command — break',
+    rec_title_start:'command — start', rec_title_stop:'command — stop'
+  }
+};
+var lang = 'pl';
+var cmds = { work:'praca', brk:'przerwa', start:'start', stop:'stop' };
+
+function setLang(l) {
+  lang = l;
+  document.querySelectorAll('.lang-btn').forEach(function(b) {
+    b.classList.toggle('active', b.textContent === l.toUpperCase());
+  });
+  applyLang();
+}
+
+function applyLang() {
+  var t = T[lang];
+  document.getElementById('app-title').textContent = t.title;
+  document.getElementById('lbl-work').innerHTML = t.work.replace('\n','<br>');
+  document.getElementById('lbl-break').innerHTML = t.brk.replace('\n','<br>');
+  document.getElementById('unit-work').textContent = t.min_click;
+  document.getElementById('unit-break').textContent = t.min_click;
+  document.getElementById('sheet-cancel').textContent = t.cancel;
+  document.getElementById('rec-hint').textContent = t.rec_hint;
+  document.getElementById('rec-save').textContent = t.save;
+  refreshCmdLabels();
+  if (!running) {
+    document.getElementById('status-txt').textContent = t.ready;
+    document.getElementById('phase-disp').textContent = '—';
+  }
+}
+
+function refreshCmdLabels() {
+  document.getElementById('cmd-work-text').textContent = cmds.work + ' ' + workMin;
+  document.getElementById('cmd-break-text').textContent = cmds.brk + ' ' + breakMin;
+  document.getElementById('cmd-start-text').textContent = cmds.start;
+  document.getElementById('cmd-stop-text').textContent = cmds.stop;
+  document.getElementById('voice-hint').textContent =
+    '"' + cmds.start + '" · "' + cmds.stop + '" · "reset" · "' + cmds.work + ' 25" · "' + cmds.brk + ' 5"';
+}
+
+var CIRC = 2 * Math.PI * 60;
+var KCIRC = 2 * Math.PI * 31;
+var workMin = 25, breakMin = 5;
+var running = false, onBreak = false;
+var remaining = workMin * 60, total = workMin * 60;
+var interval = null, sessions = 0;
+var MAX_SESSIONS = 4;
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function updateDisplay() {
+  var frac = total > 0 ? (1 - remaining / total) : 0;
+  document.getElementById('timer-disp').textContent = pad(Math.floor(remaining / 60)) + ':' + pad(remaining % 60);
+  document.getElementById('progress-ring').style.strokeDashoffset = CIRC * (1 - frac);
+  var t = T[lang];
+  if (running) {
+    document.getElementById('phase-disp').textContent = onBreak ? t.phase_break : t.phase_work;
+    document.getElementById('status-txt').textContent = onBreak ? t.breaking : t.working;
+    document.getElementById('progress-ring').style.stroke = onBreak ? '#5eb8ff' : '#e8e8e8';
+  }
+}
+
+function toggleTimer() { running ? pauseTimer() : startTimer(); }
+
+function startTimer() {
+  running = true;
+  var b = document.getElementById('play-btn');
+  b.innerHTML = '<svg class="play-icon" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>';
+  b.className = 'play-btn ' + (onBreak ? 'onbreak' : 'running');
+  interval = setInterval(tick, 1000);
+  updateDisplay();
+}
+
+function pauseTimer() {
+  running = false;
+  clearInterval(interval);
+  var b = document.getElementById('play-btn');
+  b.innerHTML = '<svg class="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  b.className = 'play-btn';
+  document.getElementById('status-txt').textContent = T[lang].ready;
+  document.getElementById('phase-disp').textContent = '—';
+}
+
+function tick() {
+  if (remaining > 0) { remaining--; updateDisplay(); return; }
+  clearInterval(interval);
+  running = false;
+  playBeep();
+  if (!onBreak) {
+    sessions = Math.min(sessions + 1, MAX_SESSIONS);
+    updateDots();
+    if (sessions >= MAX_SESSIONS) {
+      document.getElementById('status-txt').textContent = T[lang].done;
+      document.getElementById('phase-disp').textContent = '—';
+      document.getElementById('play-btn').innerHTML = '<svg class="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+      document.getElementById('play-btn').className = 'play-btn';
+      document.getElementById('progress-ring').style.strokeDashoffset = CIRC;
+      return;
+    }
+    onBreak = true; total = breakMin * 60; remaining = total;
+  } else {
+    onBreak = false; total = workMin * 60; remaining = total;
+  }
+  startTimer();
+}
+
+function resetTimer() {
+  clearInterval(interval);
+  running = false; onBreak = false; sessions = 0;
+  total = workMin * 60; remaining = total;
+  document.getElementById('play-btn').innerHTML = '<svg class="play-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>';
+  document.getElementById('play-btn').className = 'play-btn';
+  document.getElementById('progress-ring').style.stroke = '#e8e8e8';
+  document.getElementById('progress-ring').style.strokeDashoffset = CIRC;
+  document.getElementById('phase-disp').textContent = '—';
+  document.getElementById('status-txt').textContent = T[lang].ready;
+  document.getElementById('timer-disp').textContent = pad(workMin) + ':00';
+  updateDots();
+}
+
+function updateDots() {
+  document.querySelectorAll('.dot').forEach(function(d, i) {
+    d.classList.remove('done', 'active');
+    if (i < sessions) d.classList.add('done');
+    else if (i === sessions) d.classList.add('active');
+  });
+}
+
+function playBeep() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator(), g = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.frequency.value = 880;
+    g.gain.setValueAtTime(0.3, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.6);
+  } catch(e) {}
+}
+
+function updateKnobVisual(arcId, dotId, minV, maxV, val) {
+  var frac = (val - minV) / (maxV - minV);
+  document.getElementById(arcId).style.strokeDashoffset = KCIRC - frac * KCIRC * 0.75;
+  var a = (-225 + frac * 270 - 90) * Math.PI / 180;
+  document.getElementById(dotId).setAttribute('cx', (37 + 27 * Math.cos(a)).toFixed(1));
+  document.getElementById(dotId).setAttribute('cy', (37 + 27 * Math.sin(a)).toFixed(1));
+}
+
+function setupKnob(wrapId, arcId, dotId, valBtnId, minV, maxV, initVal, onChange) {
+  var wrap = document.getElementById(wrapId);
+  var drag = false, sy = 0, sv = 0, val = initVal;
+  function upd(v) {
+    val = Math.max(minV, Math.min(maxV, Math.round(v)));
+    wrap.dataset.val = val;
+    document.getElementById(valBtnId).textContent = val;
+    updateKnobVisual(arcId, dotId, minV, maxV, val);
+    onChange(val);
+  }
+  wrap.addEventListener('mousedown', function(e) { if (running) return; drag = true; sy = e.clientY; sv = val; e.preventDefault(); });
+  document.addEventListener('mousemove', function(e) { if (!drag) return; upd(sv + (sy - e.clientY) * (maxV - minV) / 120); });
+  document.addEventListener('mouseup', function() { drag = false; });
+  wrap.addEventListener('touchstart', function(e) { if (running) return; drag = true; sy = e.touches[0].clientY; sv = val; e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', function(e) { if (!drag) return; upd(sv + (sy - e.touches[0].clientY) * (maxV - minV) / 80); }, { passive: false });
+  document.addEventListener('touchend', function() { drag = false; });
+  upd(val);
+}
+
+setupKnob('knob-work', 'arc-work', 'knob-dot-work', 'val-work', 1, 60, 25, function(v) {
+  workMin = v; refreshCmdLabels();
+  if (!running) { total = workMin * 60; remaining = total; document.getElementById('timer-disp').textContent = pad(v) + ':00'; document.getElementById('progress-ring').style.strokeDashoffset = CIRC; }
+});
+setupKnob('knob-break', 'arc-break', 'knob-dot-break', 'val-break', 1, 30, 5, function(v) {
+  breakMin = v; refreshCmdLabels();
+});
+
+var pickerType = 'work';
+
+function openNumPicker(type) {
+  if (running) return;
+  pickerType = type;
+  document.getElementById('sheet-title').textContent = T[lang].pick_min;
+  var maxV = type === 'work' ? 60 : 30;
+  var cur = type === 'work' ? workMin : breakMin;
+  var grid = document.getElementById('num-grid');
+  grid.innerHTML = '';
+  for (var i = 1; i <= maxV; i++) {
+    (function(n) {
+      var c = document.createElement('div');
+      c.className = 'num-cell' + (n === cur ? (type === 'work' ? ' sel' : ' bsel') : '');
+      c.textContent = n;
+      c.onclick = function() { pickNum(n); };
+      grid.appendChild(c);
+    })(i);
+  }
+  document.getElementById('num-overlay').classList.remove('hidden');
+  setTimeout(function() {
+    var sel = grid.querySelector('.sel,.bsel');
+    if (sel) sel.scrollIntoView({ block: 'center' });
+  }, 60);
+}
+
+function pickNum(v) {
+  if (pickerType === 'work') {
+    workMin = v;
+    document.getElementById('val-work').textContent = v;
+    document.getElementById('knob-work').dataset.val = v;
+    updateKnobVisual('arc-work', 'knob-dot-work', 1, 60, v);
+    if (!running) { total = workMin * 60; remaining = total; document.getElementById('timer-disp').textContent = pad(v) + ':00'; document.getElementById('progress-ring').style.strokeDashoffset = CIRC; }
+  } else {
+    breakMin = v;
+    document.getElementById('val-break').textContent = v;
+    document.getElementById('knob-break').dataset.val = v;
+    updateKnobVisual('arc-break', 'knob-dot-break', 1, 30, v);
+  }
+  refreshCmdLabels();
+  closeNumPicker();
+}
+
+function closeNumPicker() { document.getElementById('num-overlay').classList.add('hidden'); }
+
+var recTarget = 'work', recRec = null, recActive = false, recWord = '';
+
+function openRecOverlay(target) {
+  recTarget = target; recWord = ''; recActive = false;
+  var t = T[lang];
+  var titles = { work: t.rec_title_work, break: t.rec_title_break, start: t.rec_title_start, stop: t.rec_title_stop };
+  document.getElementById('rec-title').textContent = titles[target] || 'komenda';
+  document.getElementById('rec-heard').textContent = '—';
+  document.getElementById('rec-big-btn').classList.remove('recording');
+  document.getElementById('rec-overlay').classList.remove('hidden');
+}
+
+function toggleRecording() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('rec-heard').textContent = T[lang].no_support; return; }
+  if (recActive) { recRec && recRec.stop(); recActive = false; document.getElementById('rec-big-btn').classList.remove('recording'); return; }
+  recRec = new SR();
+  recRec.lang = lang === 'pl' ? 'pl-PL' : 'en-US';
+  recRec.continuous = false; recRec.interimResults = true; recActive = true;
+  document.getElementById('rec-big-btn').classList.add('recording');
+  document.getElementById('rec-heard').textContent = '...';
+  recRec.onresult = function(e) {
+    var txt = '';
+    for (var i = 0; i < e.results.length; i++) txt = e.results[i][0].transcript;
+    recWord = txt.trim().split(/\s+/)[0].toLowerCase();
+    document.getElementById('rec-heard').textContent = recWord || '—';
+  };
+  recRec.onend = function() { recActive = false; document.getElementById('rec-big-btn').classList.remove('recording'); };
+  recRec.onerror = function() { recActive = false; document.getElementById('rec-big-btn').classList.remove('recording'); document.getElementById('rec-heard').textContent = T[lang].no_support; };
+  recRec.start();
+}
+
+function saveCustomCmd() {
+  var w = recWord.trim();
+  if (w) {
+    if (recTarget === 'work') cmds.work = w;
+    else if (recTarget === 'break') cmds.brk = w;
+    else if (recTarget === 'start') cmds.start = w;
+    else if (recTarget === 'stop') cmds.stop = w;
+    refreshCmdLabels();
+  }
+  closeRecOverlay();
+}
+
+function closeRecOverlay() {
+  recActive = false;
+  recRec && recRec.stop();
+  document.getElementById('rec-overlay').classList.add('hidden');
+}
+
+var recog = null, listenOn = false;
+
+function parseCmd(text) {
+  var t = T[lang];
+  var s = text.toLowerCase().trim();
+  var esc = function(w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
+  if (s === cmds.start || /^(start|startuj|zacznij|go)$/.test(s)) { if (!running) startTimer(); return t.cmd_ok + cmds.start; }
+  if (s === cmds.stop || /^(stop|pauza|pause|zatrzymaj|czekaj)$/.test(s)) { if (running) pauseTimer(); return t.cmd_ok + cmds.stop; }
+  if (/^(reset|resetuj|od nowa|restart)$/.test(s)) { resetTimer(); return t.cmd_ok + 'reset'; }
+  var m;
+  m = s.match(new RegExp('^(' + esc(cmds.work) + '|praca|work)\\s+(\\d+)$'));
+  if (m) { var v = Math.max(1, Math.min(60, parseInt(m[2]))); pickerType = 'work'; pickNum(v); return t.cmd_ok + cmds.work + ' ' + v; }
+  m = s.match(new RegExp('^(' + esc(cmds.brk) + '|przerwa|break)\\s+(\\d+)$'));
+  if (m) { var v2 = Math.max(1, Math.min(30, parseInt(m[2]))); pickerType = 'break'; pickNum(v2); return t.cmd_ok + cmds.brk + ' ' + v2; }
+  return null;
+}
+
+function toggleVoice() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { document.getElementById('voice-result').textContent = T[lang].no_support; return; }
+  if (listenOn) {
+    recog && recog.stop(); listenOn = false;
+    document.getElementById('mic-btn').classList.remove('listening');
+    document.getElementById('voice-heard').textContent = '—';
+    document.getElementById('voice-result').textContent = '';
+    return;
+  }
+  recog = new SR();
+  recog.lang = lang === 'pl' ? 'pl-PL' : 'en-US';
+  recog.continuous = true; recog.interimResults = true; listenOn = true;
+  document.getElementById('mic-btn').classList.add('listening');
+  document.getElementById('voice-heard').textContent = T[lang].mic_on;
+  recog.onresult = function(e) {
+    var interim = '', final = '';
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    document.getElementById('voice-heard').textContent = (final || interim || '—').slice(-36);
+    if (final) { var r = parseCmd(final.trim()); document.getElementById('voice-result').textContent = r || T[lang].no_cmd; }
+  };
+  recog.onerror = function() { document.getElementById('voice-result').textContent = T[lang].no_support; listenOn = false; document.getElementById('mic-btn').classList.remove('listening'); };
+  recog.onend = function() { if (listenOn) recog.start(); };
+  recog.start();
+}
+
+function updateClock() {
+  var n = new Date();
+  document.getElementById('clock-time').textContent = pad(n.getHours()) + ':' + pad(n.getMinutes());
+}
+updateClock();
+setInterval(updateClock, 15000);
+applyLang();
+</script>
+</body>
+</html>
